@@ -13,7 +13,6 @@ workflows:
 
       - name: Get Flutter dependencies
         script: 
-              flutter pub cache repair
               flutter pub get 
 
       - name: Build Android APK with full logs
