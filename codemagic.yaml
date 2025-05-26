@@ -3,42 +3,94 @@ workflows:
     name: Android Release Build
     environment:
       groups:
-        - keystore
+        - keystore  # Contains your signing keys
+      vars:
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-      - name: Auto-detect Java Home
+      # PHASE 1: ENVIRONMENT SETUP
+      - name: Setup Java Environment
         script: |
-          # Find the first available Java installation
+          echo "=== Setting Up Java ==="
+          # Auto-detect Java 11 or 17
           JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
           if [ -z "$JAVA_HOME" ]; then
             echo "ERROR: No Java installation found"
+            /usr/libexec/java_home -V
             exit 1
           fi
           echo "Using JAVA_HOME: $JAVA_HOME"
           echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
-
-      - name: Verify Java Installation
-        script: |
-          echo "=== Java Version ==="
           java -version
-          javac -version
-          echo "JAVA_HOME=$JAVA_HOME"
-          ls -la "$JAVA_HOME/bin/java"
 
-      - name: Setup Build Environment
+      # PHASE 2: PROJECT PREPARATION
+      - name: Verify Gradle Wrapper
         script: |
+          echo "=== Verifying Gradle ==="
+          if [ ! -f "android/gradlew" ]; then
+            echo "Generating Gradle wrapper..."
+            cd android && flutter pub get && gradle wrapper --gradle-version 7.6 --distribution-type all
+            chmod +x gradlew
+            cd ..
+          fi
+          cd android && ./gradlew --version && cd ..
+
+      - name: Clean and Prepare
+        script: |
+          echo "=== Cleaning Project ==="
           flutter clean
           rm -rf android/build
           flutter pub get
 
+      # PHASE 3: BUILD PROCESS
       - name: Run Gradle Build
         script: |
+          echo "=== Building with Gradle ==="
           cd android
-          ./gradlew clean assembleRelease --stacktrace --info --scan
+          ./gradlew clean \
+            assembleRelease \
+            --stacktrace \
+            --info \
+            --scan \
+            --no-daemon \
+            --no-parallel
           cd ..
 
-      - name: Collect Artifacts
+      - name: Build Flutter APK
         script: |
-          mkdir -p build/outputs/apk
-          cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
+          echo "=== Building Flutter APK ==="
+          flutter build apk \
+            --release \
+            --verbose \
+            --build-number=$BUILD_NUMBER \
+            --build-name=1.0.$BUILD_NUMBER
+
+      # PHASE 4: ARTIFACT HANDLING
+      - name: Prepare Artifacts
+        script: |
+          echo "=== Preparing Artifacts ==="
+          mkdir -p build/outputs
+          # Copy APKs
+          cp build/app/outputs/flutter-apk/*.apk build/outputs/
+          # Copy mapping files if needed
+          cp android/app/build/outputs/mapping/release/*.txt build/outputs/ 2>/dev/null || true
+          # List artifacts
+          ls -lh build/outputs/
+
     artifacts:
-      - build/outputs/apk/*.apk
+      - build/outputs/*.apk
+      - build/outputs/*.txt  # Include mapping files if they exist
+
+    publishing:
+      email:
+        recipients:
+          - your.email@example.com
+      scripts:
+        - name: Build Report
+          script: |
+            echo "=== Build Completed ==="
+            echo "Artifacts:"
+            ls -lh build/outputs/
+            echo "Java version:"
+            java -version
+            echo "Gradle version:"
+            cd android && ./gradlew --version && cd ..
