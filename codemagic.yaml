@@ -55,27 +55,28 @@ workflows:
             exit 1
           }
 
-      # PHASE 4: ARTIFACT HANDLING
-      - name: Package Artifacts
+      # PHASE 4: ARTIFACT COLLECTION
+      - name: Collect Artifacts
         script: |
-          echo "=== Final Artifacts ==="
+          echo "=== Collecting Artifacts ==="
           mkdir -p build/outputs/apk
-          cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
           
-          # Verify APK
-          if [ ! -f "build/outputs/apk/app-release.apk" ]; then
-            echo "ERROR: APK not generated!"
-            ls -R build/app/outputs/
+          if ls build/app/outputs/flutter-apk/*.apk 1> /dev/null 2>&1; then
+            cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
+            echo "APKs copied:"
+            ls -lh build/outputs/apk/
+          else
+            echo "No APKs found in build/app/outputs/flutter-apk/"
+            echo "Directory contents:"
+            ls -la build/app/outputs/flutter-apk/ || true
             exit 1
           fi
-          
-          echo "APK generated:"
-          ls -lh build/outputs/apk/
 
     artifacts:
       - build/outputs/apk/*.apk
       - build/logs/**
       - android/gradle/wrapper/gradle-wrapper.properties
+      - android/build.gradle
 
     publishing:
       email:
