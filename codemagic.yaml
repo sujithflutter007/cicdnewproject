@@ -5,8 +5,8 @@ workflows:
       groups:
         - keystore
       vars:
-        JAVA_HOME: "/usr/lib/jvm/java-11-openjdk-amd64"
-    scripts:
+        JAVA_HOME: "/Users/builder/hostedtoolcache/Java_11.0.25/x64/Contents/Home"  # Correct Codemagic path
+      scripts:
       - name: Debug Setup
         script: |
           echo "=== Environment Debug ==="
