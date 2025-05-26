@@ -7,84 +7,86 @@ workflows:
       vars:
         GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-      # PHASE 1: ENVIRONMENT SETUP
-      - name: Setup Environment
+      # PHASE 1: ENVIRONMENT VALIDATION
+      - name: Validate Environment
         script: |
-          echo "=== Environment Configuration ==="
+          echo "=== Environment Validation ==="
           flutter doctor -v
           java -version
-          cd android && ./gradlew --version && cd ..
+          
+          # Verify Flutter project structure
+          if [ ! -d "android" ]; then
+            echo "ERROR: Android directory missing!"
+            exit 1
+          fi
 
-      # PHASE 2: PROJECT PREPARATION
-      - name: Clean Project
+      # PHASE 2: GRADLE WRAPPER SETUP
+      - name: Setup Gradle Wrapper
+        script: |
+          echo "=== Setting Up Gradle ==="
+          cd android
+          
+          # Generate gradlew if missing
+          if [ ! -f "gradlew" ]; then
+            echo "Generating Gradle wrapper..."
+            flutter pub get
+            gradle wrapper \
+              --gradle-version 7.6 \
+              --distribution-type all
+            chmod +x gradlew
+          fi
+          
+          # Verify gradlew works
+          ./gradlew --version || {
+            echo "Gradle wrapper verification failed!"
+            exit 1
+          }
+          cd ..
+
+      # PHASE 3: BUILD PROCESS
+      - name: Clean Build
         script: |
           echo "=== Cleaning Project ==="
           flutter clean
-          rm -rf android/build app/build
+          rm -rf android/build
           flutter pub get
 
-      # PHASE 3: GRADLE BUILD WITH DEBUGGING
-      - name: Run Gradle with Full Diagnostics
+      - name: Run Release Build
         script: |
-          echo "=== Running Gradle with Debug ==="
+          echo "=== Building Release APK ==="
           cd android
-          ./gradlew clean \
-            assembleRelease \
+          ./gradlew clean assembleRelease \
             --no-daemon \
             --stacktrace \
             --info \
             --scan \
-            --console=plain \
-            -Pverbose=true \
-            > gradle_log.txt 2>&1 || (cat gradle_log.txt && exit 1)
-          cat gradle_log.txt | grep -i "error\|fail\|exception"
+            --console=plain
           cd ..
+          
+          flutter build apk --release --verbose
 
-      # PHASE 4: FLUTTER BUILD
-      - name: Build Flutter APK
+      # PHASE 4: ARTIFACT HANDLING
+      - name: Package Artifacts
         script: |
-          echo "=== Building Flutter APK ==="
-          flutter build apk \
-            --release \
-            --verbose \
-            --build-number=$BUILD_NUMBER \
-            --no-shrink
-
-      # PHASE 5: ARTIFACT HANDLING
-      - name: Collect and Verify Artifacts
-        script: |
-          echo "=== Final Artifacts ==="
+          echo "=== Preparing Artifacts ==="
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
           
           # Verify APK exists
           if [ ! -f "build/outputs/apk/app-release.apk" ]; then
             echo "ERROR: APK not generated!"
+            ls -R build/app/outputs/
             exit 1
           fi
           
-          echo "APK generated successfully:"
+          echo "Build artifacts:"
           ls -lh build/outputs/apk/
-          echo "APK info:"
-          unzip -l build/outputs/apk/app-release.apk | grep -i "libflutter.so"
 
     artifacts:
       - build/outputs/apk/*.apk
-      - android/gradle_log.txt
+      - android/build/reports/**
 
     publishing:
       email:
         recipients:
           - your.email@example.com
-      scripts:
-        - name: Build Report
-          script: |
-            echo "=== Build Diagnostics ==="
-            echo "Java version:"
-            java -version
-            echo "Flutter version:"
-            flutter --version
-            echo "Gradle version:"
-            cd android && ./gradlew --version && cd ..
-            echo "APK contents:"
-            unzip -l build/outputs/apk/*.apk | head -30
