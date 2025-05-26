@@ -3,72 +3,116 @@ workflows:
     name: Android Release Build
     environment:
       groups:
-        - keystore
+        - keystore  # Contains signing keys
       vars:
+        JAVA_HOME: "/Users/builder/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.23-8/x64/Contents/Home"
         GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-      # PHASE 1: ENVIRONMENT SETUP
-      - name: Setup Environment
+      # ======================
+      # 1. ENVIRONMENT SETUP
+      # ======================
+      - name: Verify Environment
         script: |
-          echo "=== Environment Configuration ==="
+          echo "=== Environment Check ==="
           flutter doctor -v
           java -version
-          
-          # Auto-detect Java Home
-          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
-          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
+          echo "JAVA_HOME=$JAVA_HOME"
+          ls -la "$JAVA_HOME/bin/java"
 
-      # PHASE 2: GRADLE FIXES
-      - name: Update Gradle to 8.0
+      # ======================
+      # 2. GRADLE CONFIGURATION  
+      # ======================
+      - name: Configure Gradle
         script: |
-          echo "=== Updating Gradle Wrapper ==="
+          echo "=== Gradle Setup ==="
           cd android
-          sed -i.bak 's/gradle-.*.zip/gradle-8.0-all.zip/' gradle/wrapper/gradle-wrapper.properties
-          echo "New Gradle version:"
-          cat gradle/wrapper/gradle-wrapper.properties
+          # Force Gradle 8.0
+          sed -i.bak 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip|' gradle/wrapper/gradle-wrapper.properties
+          
+          # Update Android Gradle Plugin
+          sed -i.bak 's|com.android.tools.build:gradle:[0-9.]*|com.android.tools.build:gradle:8.0.0|' build.gradle
+          
+          # Set Java 11 compatibility
+          echo "android { compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 } }" >> app/build.gradle
+          
+          ./gradlew --version
           cd ..
 
-      # PHASE 3: BUILD PROCESS
-      - name: Build with Full Diagnostics
+      # ======================
+      # 3. DEPENDENCY RESOLUTION
+      # ======================
+      - name: Resolve Dependencies
         script: |
-          echo "=== Running Build ==="
+          echo "=== Dependency Check ==="
+          flutter pub get
+          cd android
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath > ../build/logs/dependencies.txt
+          cd ..
+          echo "Problematic dependencies:"
+          grep -i "conflict\|incompatible" build/logs/dependencies.txt || echo "No conflicts found"
+
+      # ======================
+      # 4. BUILD PROCESS
+      # ======================
+      - name: Run Build with Debug
+        script: |
+          echo "=== Starting Build ==="
           mkdir -p build/logs
           
-          # Gradle build with error capture
+          # Clean everything
+          flutter clean
+          rm -rf android/build
+          
+          # Gradle build with full logging
           cd android
           ./gradlew clean assembleRelease \
             --no-daemon \
             --stacktrace \
             --info \
             --scan \
-            --console=plain 2>&1 | tee ../build/logs/gradle.log || {
-            echo "Gradle build failed! Errors:"
-            grep -A 15 -B 5 -i "error\|fail\|exception" ../build/logs/gradle.log || cat ../build/logs/gradle.log
-            exit 1
+            --console=plain \
+            -Pverbose=true \
+            > ../build/logs/gradle.log 2>&1 || {
+              echo "=== GRADLE BUILD FAILED ==="
+              echo "Last 50 lines:"
+              tail -n 50 ../build/logs/gradle.log
+              echo "Relevant errors:"
+              grep -A 20 -B 5 -i "error\|fail\|exception\|flutter_plugin_android_lifecycle\|compileReleaseJavaWithJavac" ../build/logs/gradle.log || cat ../build/logs/gradle.log
+              exit 1
           }
           cd ..
           
-          # Flutter build with error capture
-          flutter build apk --release --verbose 2>&1 | tee build/logs/flutter.log || {
-            echo "Flutter build failed! Errors:"
-            grep -A 15 -B 5 -i "error\|fail\|exception" build/logs/flutter.log || cat build/logs/flutter.log
+          # Flutter build
+          flutter build apk --release --verbose > build/logs/flutter.log 2>&1 || {
+            echo "=== FLUTTER BUILD FAILED ==="
+            tail -n 50 build/logs/flutter.log
             exit 1
           }
 
-      # PHASE 4: ARTIFACT COLLECTION
-      - name: Collect Artifacts
+      # ======================
+      # 5. ARTIFACT VERIFICATION
+      # ======================
+      - name: Verify and Package Artifacts
         script: |
-          echo "=== Collecting Artifacts ==="
-          mkdir -p build/outputs/apk
+          echo "=== Artifact Verification ==="
+          if [ ! -d "build/app/outputs/flutter-apk" ]; then
+            echo "❌ ERROR: No APK directory found!"
+            echo "Build outputs:"
+            ls -la build/app/outputs/ || true
+            exit 1
+          fi
           
-          if ls build/app/outputs/flutter-apk/*.apk 1> /dev/null 2>&1; then
+          mkdir -p build/outputs/apk
+          if ls build/app/outputs/flutter-apk/*.apk >/dev/null 2>&1; then
             cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
-            echo "APKs copied:"
+            echo "✅ APKs copied:"
             ls -lh build/outputs/apk/
           else
-            echo "No APKs found in build/app/outputs/flutter-apk/"
+            echo "❌ ERROR: No APK files found in build/app/outputs/flutter-apk/"
             echo "Directory contents:"
             ls -la build/app/outputs/flutter-apk/ || true
+            echo "Build logs:"
+            grep -i "error\|fail" build/logs/*.log || true
             exit 1
           fi
 
@@ -77,6 +121,7 @@ workflows:
       - build/logs/**
       - android/gradle/wrapper/gradle-wrapper.properties
       - android/build.gradle
+      - android/app/build.gradle
 
     publishing:
       email:
@@ -85,10 +130,14 @@ workflows:
       scripts:
         - name: Build Report
           script: |
-            echo "=== Build Summary ==="
+            echo "=== BUILD DIAGNOSTICS ==="
             echo "Gradle version:"
             cat android/gradle/wrapper/gradle-wrapper.properties | grep "distributionUrl"
-            echo "Java version:"
-            java -version
+            echo "Android Gradle Plugin:"
+            grep "com.android.tools.build:gradle" android/build.gradle
+            echo "Java compatibility:"
+            grep "sourceCompatibility" android/app/build.gradle || echo "Using default Java version"
+            echo "Dependency conflicts:"
+            grep -i "conflict\|incompatible" build/logs/dependencies.txt || echo "No conflicts found"
             echo "APK info:"
             ls -lh build/outputs/apk/
