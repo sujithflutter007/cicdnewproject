@@ -3,62 +3,45 @@ workflows:
     name: Android Release Build
     environment:
       groups:
-        - keystore  # Contains signing keys
+        - keystore
       vars:
-         GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-      - name: Setup Environment
+      # ======================
+      # 1. ENVIRONMENT SETUP (WITH DIRECTORY VERIFICATION)
+      # ======================
+      - name: Initialize Build Environment
         script: |
-          echo "=== Starting Environment Setup ==="
+          echo "=== Initializing Build Environment ==="
           
-          # 1. Create directories with verification
-          echo "Creating build directories..."
-          if ! mkdir -p build/logs build/outputs/apk; then
-            echo "Failed to create directories!"
-            echo "Current working directory: $(pwd)"
-            echo "Directory permissions:"
-            ls -ld $(pwd) build || true
-            exit 1
-          fi
-          
-          # 2. Verify directory creation
-          echo "Verifying directories exist..."
+          # Create ALL required directories first with verification
+          mkdir -p build/logs build/outputs/apk
           if [ ! -d "build/logs" ] || [ ! -d "build/outputs/apk" ]; then
-            echo "Directories not created!"
-            echo "Directory structure:"
-            find . -type d | grep -v '.git' || true
+            echo "❌ CRITICAL: Directory creation failed!"
+            echo "Current path: $(pwd)"
+            echo "Disk space:"
+            df -h .
+            echo "Permissions:"
+            ls -ld $(pwd) build
             exit 1
           fi
           
-          # 3. Java setup with fallbacks
-          echo "Configuring Java environment..."
-          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null || echo "")
-          if [ -z "$JAVA_HOME" ]; then
-            echo "No Java installation found"
-            echo "Available Java versions:"
-            /usr/libexec/java_home -V || true
-            exit 1
-          fi
-          
-          echo "Using JAVA_HOME: $JAVA_HOME"
-          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
-          java -version 2>&1 | tee build/logs/java_version.log
-          
-          # 4. Final verification
-          echo "=== Setup Complete ==="
-          echo "Directory structure:"
-          ls -lR build || true
-          echo "Environment variables:"
-          printenv | grep -E 'JAVA_HOME|GRADLE|ANDROID' || true
-
+          # Store environment info
+          {
+            echo "=== Environment ==="
+            flutter doctor -v
+            java -version
+            echo "JAVA_HOME: ${JAVA_HOME:-Not Set}"
+          } > build/logs/environment.log 2>&1
 
       # ======================
-      # 2. GRADLE CONFIGURATION  
+      # 2. GRADLE CONFIGURATION
       # ======================
       - name: Configure Gradle
         script: |
-          echo "=== Gradle Setup ==="
-          cd android
+          echo "=== Configuring Gradle ===" | tee -a build/logs/setup.log
+          cd android || { echo "❌ Android directory missing!" | tee -a ../build/logs/setup.log; exit 1; }
+          
           # Force Gradle 8.0
           sed -i.bak 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip|' gradle/wrapper/gradle-wrapper.properties
           
@@ -68,7 +51,10 @@ workflows:
           # Set Java 11 compatibility
           echo "android { compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 } }" >> app/build.gradle
           
-          ./gradlew --version
+          ./gradlew --version >> ../build/logs/setup.log 2>&1 || {
+            echo "❌ Gradle verification failed!" | tee -a ../build/logs/setup.log
+            exit 1
+          }
           cd ..
 
       # ======================
@@ -76,23 +62,23 @@ workflows:
       # ======================
       - name: Resolve Dependencies
         script: |
-          echo "=== Dependency Check ==="
-          flutter pub get
-          cd android
-          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath > ../build/logs/dependencies.txt
+          echo "=== Resolving Dependencies ===" | tee -a build/logs/dependencies.log
+          flutter pub get >> build/logs/dependencies.log 2>&1
+          cd android && ./gradlew :app:dependencies --configuration releaseRuntimeClasspath >> ../build/logs/dependencies.log 2>&1
           cd ..
-          echo "Problematic dependencies:"
-          grep -i "conflict\|incompatible" build/logs/dependencies.txt || echo "No conflicts found"
+          echo "=== Dependency Conflicts ===" | tee -a build/logs/dependencies.log
+          grep -i "conflict\|incompatible" build/logs/dependencies.log || echo "No conflicts found" | tee -a build/logs/dependencies.log
 
       # ======================
-      # 4. BUILD PROCESS
+      # 4. BUILD PROCESS (WITH ROBUST ERROR HANDLING)
       # ======================
-      - name: Run Build with Debug
+      - name: Execute Build
         script: |
-          echo "=== Starting Build ===" | tee build/logs/build.log
+          echo "=== Starting Build Process ===" | tee -a build/logs/build.log
           flutter clean >> build/logs/build.log 2>&1
+          rm -rf android/build >> build/logs/build.log 2>&1
           
-          # Run Gradle build with proper log handling
+          # Gradle build with guaranteed log handling
           cd android
           {
             ./gradlew clean assembleRelease \
@@ -102,48 +88,48 @@ workflows:
               --scan \
               --console=plain 2>&1 | tee ../build/logs/gradle.log
           } || {
-            echo "=== GRADLE BUILD FAILED ===" | tee -a ../build/logs/build.log
-            echo "Last 50 lines:" | tee -a ../build/logs/build.log
-            tail -n 50 ../build/logs/gradle.log | tee -a ../build/logs/build.log
-            echo "Relevant errors:" | tee -a ../build/logs/build.log
-            grep -A 20 -B 5 -i "error\|fail\|exception" ../build/logs/gradle.log | tee -a ../build/logs/build.log || true
+            echo "=== GRADLE BUILD FAILURE ===" | tee -a ../build/logs/build.log
+            [ -f "../build/logs/gradle.log" ] && {
+              echo "Last 50 lines:" | tee -a ../build/logs/build.log
+              tail -n 50 "../build/logs/gradle.log" | tee -a ../build/logs/build.log
+              echo "Relevant errors:" | tee -a ../build/logs/build.log
+              grep -A 20 -B 5 -i "error\|fail\|exception" "../build/logs/gradle.log" | tee -a ../build/logs/build.log
+            }
             exit 1
           }
           cd ..
           
-          # Run Flutter build
+          # Flutter build
           {
             flutter build apk --release --verbose 2>&1 | tee build/logs/flutter.log
           } || {
-            echo "=== FLUTTER BUILD FAILED ===" | tee -a build/logs/build.log
-            tail -n 50 build/logs/flutter.log | tee -a build/logs/build.log
+            echo "=== FLUTTER BUILD FAILURE ===" | tee -a build/logs/build.log
+            [ -f "build/logs/flutter.log" ] && tail -n 50 "build/logs/flutter.log" | tee -a build/logs/build.log
             exit 1
           }
 
       # ======================
-      # 5. ARTIFACT VERIFICATION
+      # 5. ARTIFACT VERIFICATION (WITH FILE EXISTENCE CHECKS)
       # ======================
-      - name: Verify and Package Artifacts
+      - name: Verify and Package Output
         script: |
-          echo "=== Artifact Verification ==="
+          echo "=== Verifying Artifacts ===" | tee -a build/logs/artifacts.log
           if [ ! -d "build/app/outputs/flutter-apk" ]; then
-            echo "ERROR: No APK directory found!"
-            echo "Build outputs:"
-            ls -la build/app/outputs/ || true
+            echo "❌ ERROR: APK directory missing!" | tee -a build/logs/artifacts.log
+            echo "Build structure:" | tee -a build/logs/artifacts.log
+            find build -type d | tee -a build/logs/artifacts.log
             exit 1
           fi
           
           mkdir -p build/outputs/apk
           if ls build/app/outputs/flutter-apk/*.apk >/dev/null 2>&1; then
             cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
-            echo "APKs copied:"
-            ls -lh build/outputs/apk/
+            echo "✅ APKs generated:" | tee -a build/logs/artifacts.log
+            ls -lh build/outputs/apk/ | tee -a build/logs/artifacts.log
           else
-            echo "ERROR: No APK files found in build/app/outputs/flutter-apk/"
-            echo "Directory contents:"
-            ls -la build/app/outputs/flutter-apk/ || true
-            echo "Build logs:"
-            grep -i "error\|fail" build/logs/*.log || true
+            echo "❌ ERROR: No APK files found!" | tee -a build/logs/artifacts.log
+            echo "Directory contents:" | tee -a build/logs/artifacts.log
+            ls -la build/app/outputs/flutter-apk/ | tee -a build/logs/artifacts.log
             exit 1
           fi
 
@@ -166,9 +152,7 @@ workflows:
             cat android/gradle/wrapper/gradle-wrapper.properties | grep "distributionUrl"
             echo "Android Gradle Plugin:"
             grep "com.android.tools.build:gradle" android/build.gradle
-            echo "Java compatibility:"
-            grep "sourceCompatibility" android/app/build.gradle || echo "Using default Java version"
-            echo "Dependency conflicts:"
-            grep -i "conflict\|incompatible" build/logs/dependencies.txt || echo "No conflicts found"
+            echo "Critical errors:"
+            grep -i "error\|fail\|exception" build/logs/*.log | tail -n 20 || echo "No critical errors found"
             echo "APK info:"
             ls -lh build/outputs/apk/
