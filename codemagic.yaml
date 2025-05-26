@@ -5,35 +5,33 @@ workflows:
       groups:
         - keystore
       vars:
-        JAVA_HOME: "/Users/builder/hostedtoolcache/Java_11.0.25/x64/Contents/Home"  # Correct Codemagic path
-      scripts:
-      - name: Debug Setup
+        JAVA_HOME: "/usr/lib/jvm/java-11-openjdk-amd64"  # Standard Java 11 path
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"  # More stable builds
+    scripts:
+      - name: Verify Environment
         script: |
-          echo "=== Environment Debug ==="
+          echo "=== Environment Verification ==="
           flutter doctor -v
           java -version
-          cd android && ./gradlew --version
-          cd ..
-
+          echo "JAVA_HOME=$JAVA_HOME"
+          
       - name: Clean and Prepare
         script: |
           flutter clean
           rm -rf android/build
           flutter pub get
-
-      - name: Build with Full Logs
+          
+      - name: Build with Debugging
         script: |
           cd android
-          ./gradlew clean --stacktrace --info
-          ./gradlew assembleRelease --stacktrace --info --scan
+          ./gradlew clean assembleRelease --stacktrace --info --scan
           cd ..
-          flutter build apk --release --verbose
-
-      - name: Artifact Collection
+          
+      - name: Collect Artifacts
         script: |
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
-          ls -la build/outputs/apk/
+          ls -lh build/outputs/apk/
     artifacts:
       - build/outputs/apk/*.apk
     publishing:
