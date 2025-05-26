@@ -3,58 +3,44 @@ workflows:
     name: Android Release Build
     environment:
       groups:
-        - keystore  # Contains your signing keys
+        - keystore
       vars:
         GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
       # PHASE 1: ENVIRONMENT SETUP
-      - name: Setup Java Environment
+      - name: Setup Environment
         script: |
-          echo "=== Setting Up Java ==="
-          # Auto-detect Java 11 or 17
-          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
-          if [ -z "$JAVA_HOME" ]; then
-            echo "ERROR: No Java installation found"
-            /usr/libexec/java_home -V
-            exit 1
-          fi
-          echo "Using JAVA_HOME: $JAVA_HOME"
-          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
+          echo "=== Environment Configuration ==="
+          flutter doctor -v
           java -version
-
-      # PHASE 2: PROJECT PREPARATION
-      - name: Verify Gradle Wrapper
-        script: |
-          echo "=== Verifying Gradle ==="
-          if [ ! -f "android/gradlew" ]; then
-            echo "Generating Gradle wrapper..."
-            cd android && flutter pub get && gradle wrapper --gradle-version 7.6 --distribution-type all
-            chmod +x gradlew
-            cd ..
-          fi
           cd android && ./gradlew --version && cd ..
 
-      - name: Clean and Prepare
+      # PHASE 2: PROJECT PREPARATION
+      - name: Clean Project
         script: |
           echo "=== Cleaning Project ==="
           flutter clean
-          rm -rf android/build
+          rm -rf android/build app/build
           flutter pub get
 
-      # PHASE 3: BUILD PROCESS
-      - name: Run Gradle Build
+      # PHASE 3: GRADLE BUILD WITH DEBUGGING
+      - name: Run Gradle with Full Diagnostics
         script: |
-          echo "=== Building with Gradle ==="
+          echo "=== Running Gradle with Debug ==="
           cd android
           ./gradlew clean \
             assembleRelease \
+            --no-daemon \
             --stacktrace \
             --info \
             --scan \
-            --no-daemon \
-            --no-parallel
+            --console=plain \
+            -Pverbose=true \
+            > gradle_log.txt 2>&1 || (cat gradle_log.txt && exit 1)
+          cat gradle_log.txt | grep -i "error\|fail\|exception"
           cd ..
 
+      # PHASE 4: FLUTTER BUILD
       - name: Build Flutter APK
         script: |
           echo "=== Building Flutter APK ==="
@@ -62,23 +48,29 @@ workflows:
             --release \
             --verbose \
             --build-number=$BUILD_NUMBER \
-            --build-name=1.0.$BUILD_NUMBER
+            --no-shrink
 
-      # PHASE 4: ARTIFACT HANDLING
-      - name: Prepare Artifacts
+      # PHASE 5: ARTIFACT HANDLING
+      - name: Collect and Verify Artifacts
         script: |
-          echo "=== Preparing Artifacts ==="
-          mkdir -p build/outputs
-          # Copy APKs
-          cp build/app/outputs/flutter-apk/*.apk build/outputs/
-          # Copy mapping files if needed
-          cp android/app/build/outputs/mapping/release/*.txt build/outputs/ 2>/dev/null || true
-          # List artifacts
-          ls -lh build/outputs/
+          echo "=== Final Artifacts ==="
+          mkdir -p build/outputs/apk
+          cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
+          
+          # Verify APK exists
+          if [ ! -f "build/outputs/apk/app-release.apk" ]; then
+            echo "ERROR: APK not generated!"
+            exit 1
+          fi
+          
+          echo "APK generated successfully:"
+          ls -lh build/outputs/apk/
+          echo "APK info:"
+          unzip -l build/outputs/apk/app-release.apk | grep -i "libflutter.so"
 
     artifacts:
-      - build/outputs/*.apk
-      - build/outputs/*.txt  # Include mapping files if they exist
+      - build/outputs/apk/*.apk
+      - android/gradle_log.txt
 
     publishing:
       email:
@@ -87,10 +79,12 @@ workflows:
       scripts:
         - name: Build Report
           script: |
-            echo "=== Build Completed ==="
-            echo "Artifacts:"
-            ls -lh build/outputs/
+            echo "=== Build Diagnostics ==="
             echo "Java version:"
             java -version
+            echo "Flutter version:"
+            flutter --version
             echo "Gradle version:"
             cd android && ./gradlew --version && cd ..
+            echo "APK contents:"
+            unzip -l build/outputs/apk/*.apk | head -30
