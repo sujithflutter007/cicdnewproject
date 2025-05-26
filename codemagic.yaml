@@ -16,16 +16,18 @@ workflows:
 
       - name: Build Android APK with full logs
         script: |
+          flutter pub get
           flutter build apk --release --verbose || {
             echo "Build failed with exit code $?"
             exit 1
           }
-  
-
+          
+          # Optional: Copy APK to artifacts location
+          mkdir -p build/outputs/apk
+          cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
     artifacts:
-      - build/app/outputs/**/*.apk
-
-publishing:
-  email:
-    recipients:
-      - sujith.ks@wayvida.com
+      - build/**/outputs/apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - sujith.ks@wayvida.com
