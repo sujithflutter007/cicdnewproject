@@ -11,10 +11,6 @@ workflows:
           flutter --version
           java -version
 
-      - name: Get Flutter dependencies
-        script: 
-              flutter pub get 
-
       - name: Build Android APK with full logs
         script: |
           flutter pub get
