@@ -1,0 +1,31 @@
+workflows:
+  android-debug-simple:
+    name: Simple Android Debug Build
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Print Flutter and Java version
+        script: |
+          flutter --version
+          java -version
+
+      - name: Get Flutter dependencies
+        script: flutter pub get --offline
+
+      - name: Build Android APK with full logs
+        script: |
+          flutter build apk --release --verbose || {
+            echo "Build failed with exit code $?"
+            exit 1
+          }
+  
+
+    artifacts:
+      - build/app/outputs/**/*.apk
+
+publishing:
+  email:
+    recipients:
+      - sujith.ks@wayvida.com
