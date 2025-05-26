@@ -9,20 +9,35 @@ workflows:
     scripts:
       - name: Setup Java Environment
         script: |
-          echo "=== Setting Up Java ==="
-           echo "=== Creating Log Directory ==="
+         # Create necessary directories
           mkdir -p build/logs
-          flutter doctor -v > build/logs/environment.log
-          # Auto-detect Java 11 or 17
+          
+          # Auto-detect Java installation
+          echo "=== Java Environment Setup ==="
           JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
+          
           if [ -z "$JAVA_HOME" ]; then
-            echo "ERROR: No Java installation found"
+            echo "ERROR: No compatible Java installation found"
+            echo "Available Java versions:"
             /usr/libexec/java_home -V
-             exit 1
-           fi
-           echo "Using JAVA_HOME: $JAVA_HOME"
-           echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
-           java -version
+            exit 1
+          fi
+          
+          echo "✅ Using JAVA_HOME: $JAVA_HOME"
+          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
+          
+          # Verify Java installation
+          echo "Java version info:"
+          java -version 2>&1 | tee build/logs/java_version.log
+          
+          # Create build directory (corrected from your typo 'mkdr - build/long v')
+          mkdir -p build/long
+          
+          echo "=== Directory Structure ==="
+          echo "build/logs contents:"
+          ls -la build/logs/
+          echo "build/long contents:"
+          ls -la build/long/
       - name: Verify Environment
         script: |
           echo "=== Environment Check ==="
