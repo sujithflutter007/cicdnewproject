@@ -5,36 +5,31 @@ workflows:
       groups:
         - keystore
       vars:
-        JAVA_HOME: "/usr/lib/jvm/java-11-openjdk-amd64"  # Standard Java 11 path
-        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"  # More stable builds
+        JAVA_HOME: "/Users/builder/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.23-8/x64/Contents/Home"  # Verified working path
     scripts:
-      - name: Verify Environment
+      - name: Verify Java Installation
         script: |
-          echo "=== Environment Verification ==="
-          flutter doctor -v
+          echo "=== Java Version ==="
+          /usr/libexec/java_home -V  # List available Java versions
           java -version
           echo "JAVA_HOME=$JAVA_HOME"
-          
-      - name: Clean and Prepare
+          ls -la "$JAVA_HOME/bin/java" || echo "Java path verification failed"
+
+      - name: Setup Build Environment
         script: |
           flutter clean
           rm -rf android/build
           flutter pub get
-          
-      - name: Build with Debugging
+
+      - name: Run Gradle Build
         script: |
           cd android
           ./gradlew clean assembleRelease --stacktrace --info --scan
           cd ..
-          
+
       - name: Collect Artifacts
         script: |
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
-          ls -lh build/outputs/apk/
     artifacts:
       - build/outputs/apk/*.apk
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
