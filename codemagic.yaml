@@ -4,16 +4,25 @@ workflows:
     environment:
       groups:
         - keystore
-      vars:
-        JAVA_HOME: "/Users/builder/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.23-8/x64/Contents/Home"  # Verified working path
     scripts:
+      - name: Auto-detect Java Home
+        script: |
+          # Find the first available Java installation
+          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
+          if [ -z "$JAVA_HOME" ]; then
+            echo "ERROR: No Java installation found"
+            exit 1
+          fi
+          echo "Using JAVA_HOME: $JAVA_HOME"
+          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
+
       - name: Verify Java Installation
         script: |
           echo "=== Java Version ==="
-          /usr/libexec/java_home -V  # List available Java versions
           java -version
+          javac -version
           echo "JAVA_HOME=$JAVA_HOME"
-          ls -la "$JAVA_HOME/bin/java" || echo "Java path verification failed"
+          ls -la "$JAVA_HOME/bin/java"
 
       - name: Setup Build Environment
         script: |
