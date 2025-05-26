@@ -1,46 +1,29 @@
 workflows:
   android-release:
-    name: Android Release
+    name: Android Release Build
     environment:
       groups:
         - keystore
-      vars:
-        BUILD_NUMBER: $BUILD_NUMBER
     scripts:
       - name: Setup environment
         script: |
-          flutter --version
-          java -version
-          flutter pub cache repair
-          
-      - name: Install dependencies
-        script: |
           flutter pub get
-          cd android && ./gradlew dependencies
-          
-      - name: Clean project
-        script: |
           flutter clean
-          cd android && ./gradlew clean
-          
+
+      - name: Generate Gradle wrapper
+        script: |
+          cd android
+          flutter pub get
+          flutter clean
+          gradle wrapper --gradle-version 7.5
+
       - name: Build APK
         script: |
-          flutter build apk --release \
-            --build-number=$BUILD_NUMBER \
-            --verbose || {
-              echo "Build failed! Check logs above"
-              cd android && ./gradlew assembleRelease --stacktrace
-              exit 1
-            }
-            
+          flutter build apk --release --verbose
+
       - name: Prepare artifacts
         script: |
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
-          ls -la build/outputs/apk/
     artifacts:
       - build/outputs/apk/*.apk
-    publishing:
-      email:
-        recipients:
-          - sujith.ks@wayvida.com
