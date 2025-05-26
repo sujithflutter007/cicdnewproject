@@ -7,98 +7,87 @@ workflows:
       vars:
         GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-      # PHASE 1: ENVIRONMENT VALIDATION
-      - name: Validate Environment
+      # PHASE 1: ENVIRONMENT SETUP
+      - name: Setup Environment
         script: |
-          echo "=== Environment Validation ==="
+          echo "=== Environment Configuration ==="
           flutter doctor -v
           java -version
           
-          # Verify Flutter project structure
-          if [ ! -d "android" ]; then
-            echo "ERROR: Android directory missing!"
-            exit 1
-          fi
+          # Auto-detect Java Home
+          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
+          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
 
-      # PHASE 2: GRADLE WRAPPER SETUP
-      - name: Setup Gradle Wrapper
+      # PHASE 2: GRADLE FIXES
+      - name: Update Gradle to 8.0
         script: |
-          echo "=== Setting Up Gradle ==="
+          echo "=== Updating Gradle Wrapper ==="
           cd android
-          
-          # Generate gradlew if missing
-          if [ ! -f "gradlew" ]; then
-            echo "Generating Gradle wrapper..."
-            flutter pub get
-            gradle wrapper \
-              --gradle-version 7.6 \
-              --distribution-type all
-            chmod +x gradlew
-          fi
-          
-          # Verify gradlew works
-          ./gradlew --version || {
-            echo "Gradle wrapper verification failed!"
-            exit 1
-          }
+          sed -i.bak 's/gradle-.*.zip/gradle-8.0-all.zip/' gradle/wrapper/gradle-wrapper.properties
+          echo "New Gradle version:"
+          cat gradle/wrapper/gradle-wrapper.properties
           cd ..
 
       # PHASE 3: BUILD PROCESS
-      - name: Clean Build
+      - name: Build with Full Diagnostics
         script: |
-          echo "=== Cleaning Project ==="
-          flutter clean
-          rm -rf android/build
-          flutter pub get
-      - name: Build with Error Handling
-        script: |
+          echo "=== Running Build ==="
           mkdir -p build/logs
-          set -euo pipefail
-      
-          echo "=== Gradle Build ==="
+          
+          # Gradle build with error capture
           cd android
           ./gradlew clean assembleRelease \
-          --no-daemon \
-          --stacktrace \
-          --info \
-          --scan \
-          --console=plain 2>&1 | tee ../build/logs/gradle.log || {
-          echo "Gradle errors:"
-          grep -A 10 -i "error\|fail\|exception" ../build/logs/gradle.log || cat ../build/logs/gradle.log
-          exit 1
+            --no-daemon \
+            --stacktrace \
+            --info \
+            --scan \
+            --console=plain 2>&1 | tee ../build/logs/gradle.log || {
+            echo "Gradle build failed! Errors:"
+            grep -A 15 -B 5 -i "error\|fail\|exception" ../build/logs/gradle.log || cat ../build/logs/gradle.log
+            exit 1
           }
           cd ..
-      
-          echo "=== Flutter Build ==="
+          
+          # Flutter build with error capture
           flutter build apk --release --verbose 2>&1 | tee build/logs/flutter.log || {
-          echo "Flutter errors:"
-          grep -A 10 -i "error\|fail\|exception" build/logs/flutter.log || cat build/logs/flutter.log
-          exit 1
+            echo "Flutter build failed! Errors:"
+            grep -A 15 -B 5 -i "error\|fail\|exception" build/logs/flutter.log || cat build/logs/flutter.log
+            exit 1
           }
-
 
       # PHASE 4: ARTIFACT HANDLING
       - name: Package Artifacts
         script: |
-          echo "=== Preparing Artifacts ==="
+          echo "=== Final Artifacts ==="
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
           
-          # Verify APK exists
+          # Verify APK
           if [ ! -f "build/outputs/apk/app-release.apk" ]; then
             echo "ERROR: APK not generated!"
             ls -R build/app/outputs/
             exit 1
           fi
           
-          echo "Build artifacts:"
+          echo "APK generated:"
           ls -lh build/outputs/apk/
 
     artifacts:
       - build/outputs/apk/*.apk
-      - android/build/reports/**
+      - build/logs/**
+      - android/gradle/wrapper/gradle-wrapper.properties
 
     publishing:
       email:
         recipients:
           - your.email@example.com
+      scripts:
+        - name: Build Report
+          script: |
+            echo "=== Build Summary ==="
+            echo "Gradle version:"
+            cat android/gradle/wrapper/gradle-wrapper.properties | grep "distributionUrl"
+            echo "Java version:"
+            java -version
+            echo "APK info:"
+            ls -lh build/outputs/apk/

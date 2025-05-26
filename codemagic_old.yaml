@@ -1,0 +1,104 @@
+workflows:
+  android-release:
+    name: Android Release Build
+    environment:
+      groups:
+        - keystore
+      vars:
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
+    scripts:
+      # PHASE 1: ENVIRONMENT VALIDATION
+      - name: Validate Environment
+        script: |
+          echo "=== Environment Validation ==="
+          flutter doctor -v
+          java -version
+          
+          # Verify Flutter project structure
+          if [ ! -d "android" ]; then
+            echo "ERROR: Android directory missing!"
+            exit 1
+          fi
+
+      # PHASE 2: GRADLE WRAPPER SETUP
+      - name: Setup Gradle Wrapper
+        script: |
+          echo "=== Setting Up Gradle ==="
+          cd android
+          
+          # Generate gradlew if missing
+          if [ ! -f "gradlew" ]; then
+            echo "Generating Gradle wrapper..."
+            flutter pub get
+            gradle wrapper \
+              --gradle-version 7.6 \
+              --distribution-type all
+            chmod +x gradlew
+          fi
+          
+          # Verify gradlew works
+          ./gradlew --version || {
+            echo "Gradle wrapper verification failed!"
+            exit 1
+          }
+          cd ..
+
+      # PHASE 3: BUILD PROCESS
+      - name: Clean Build
+        script: |
+          echo "=== Cleaning Project ==="
+          flutter clean
+          rm -rf android/build
+          flutter pub get
+      - name: Build with Error Handling
+        script: |
+          mkdir -p build/logs
+          set -euo pipefail
+      
+          echo "=== Gradle Build ==="
+          cd android
+          ./gradlew clean assembleRelease \
+          --no-daemon \
+          --stacktrace \
+          --info \
+          --scan \
+          --console=plain 2>&1 | tee ../build/logs/gradle.log || {
+          echo "Gradle errors:"
+          grep -A 10 -i "error\|fail\|exception" ../build/logs/gradle.log || cat ../build/logs/gradle.log
+          exit 1
+          }
+          cd ..
+      
+          echo "=== Flutter Build ==="
+          flutter build apk --release --verbose 2>&1 | tee build/logs/flutter.log || {
+          echo "Flutter errors:"
+          grep -A 10 -i "error\|fail\|exception" build/logs/flutter.log || cat build/logs/flutter.log
+          exit 1
+          }
+
+
+      # PHASE 4: ARTIFACT HANDLING
+      - name: Package Artifacts
+        script: |
+          echo "=== Preparing Artifacts ==="
+          mkdir -p build/outputs/apk
+          cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
+          
+          # Verify APK exists
+          if [ ! -f "build/outputs/apk/app-release.apk" ]; then
+            echo "ERROR: APK not generated!"
+            ls -R build/app/outputs/
+            exit 1
+          fi
+          
+          echo "Build artifacts:"
+          ls -lh build/outputs/apk/
+
+    artifacts:
+      - build/outputs/apk/*.apk
+      - android/build/reports/**
+
+    publishing:
+      email:
+        recipients:
+          - your.email@example.com
