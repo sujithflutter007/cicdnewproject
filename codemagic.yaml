@@ -12,7 +12,9 @@ workflows:
           java -version
 
       - name: Get Flutter dependencies
-        script: flutter pub get --offline
+        script: 
+              flutter pub cache repair
+              flutter pub get --offline
 
       - name: Build Android APK with full logs
         script: |
