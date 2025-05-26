@@ -50,20 +50,32 @@ workflows:
           flutter clean
           rm -rf android/build
           flutter pub get
-
-      - name: Run Release Build
+      - name: Build with Error Handling
         script: |
-          echo "=== Building Release APK ==="
+          mkdir -p build/logs
+          set -euo pipefail
+      
+          echo "=== Gradle Build ==="
           cd android
           ./gradlew clean assembleRelease \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            --scan \
-            --console=plain
+          --no-daemon \
+          --stacktrace \
+          --info \
+          --scan \
+          --console=plain 2>&1 | tee ../build/logs/gradle.log || {
+          echo "Gradle errors:"
+          grep -A 10 -i "error\|fail\|exception" ../build/logs/gradle.log || cat ../build/logs/gradle.log
+          exit 1
+          }
           cd ..
-          
-          flutter build apk --release --verbose
+      
+          echo "=== Flutter Build ==="
+          flutter build apk --release --verbose 2>&1 | tee build/logs/flutter.log || {
+          echo "Flutter errors:"
+          grep -A 10 -i "error\|fail\|exception" build/logs/flutter.log || cat build/logs/flutter.log
+          exit 1
+          }
+
 
       # PHASE 4: ARTIFACT HANDLING
       - name: Package Artifacts
