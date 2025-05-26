@@ -5,13 +5,13 @@ workflows:
       groups:
         - keystore
     scripts:
-      - name: Setup Kotlin and Gradle
-        script: |
-          # Set compatible Kotlin version
-          sed -i '' "s/kotlin_version = '1.9.20'/kotlin_version = '1.8.10'/" android/build.gradle
+      # - name: Setup Kotlin and Gradle
+      #   script: |
+      #     # Set compatible Kotlin version
+      #     sed -i '' "s/kotlin_version = '1.9.20'/kotlin_version = '1.8.10'/" android/build.gradle
           
-          # Verify Gradle wrapper
-          cd android && ./gradlew --version
+      #     # Verify Gradle wrapper
+      #     cd android && ./gradlew --version
       - name: Setup environment
         script: |
           flutter pub get
