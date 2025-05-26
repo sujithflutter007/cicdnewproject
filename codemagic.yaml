@@ -23,6 +23,10 @@ workflows:
           flutter pub get
           flutter clean
           gradle wrapper --gradle-version 7.5
+      - name: Downgrade Kotlin
+        script: |
+          sed -i.bak 's/kotlin_version = .*/kotlin_version = "1.8.10"/' android/build.gradle
+          sed -i.bak 's/gradle:7.[0-9].*/gradle:7.6.0"/' android/build.gradle
 
       - name: Build APK
         script: |
