@@ -1,29 +1,45 @@
 workflows:
-  android-debug-simple:
-    name: Simple Android Debug Build
-    instance_type: mac_mini_m1
+  android-release:
+    name: Android Release
     environment:
-      flutter: stable
-      java: 17
+      groups:
+        - keystore
+      vars:
+        BUILD_NUMBER: $BUILD_NUMBER
     scripts:
-      - name: Print Flutter and Java version
+      - name: Setup environment
         script: |
           flutter --version
           java -version
-
-      - name: Build Android APK with full logs
+          flutter pub cache repair
+          
+      - name: Install dependencies
         script: |
           flutter pub get
-          flutter build apk --release --verbose || {
-            echo "Build failed with exit code $?"
-            exit 1
-          }
+          cd android && ./gradlew dependencies
           
-          # Optional: Copy APK to artifacts location
+      - name: Clean project
+        script: |
+          flutter clean
+          cd android && ./gradlew clean
+          
+      - name: Build APK
+        script: |
+          flutter build apk --release \
+            --build-number=$BUILD_NUMBER \
+            --verbose || {
+              echo "Build failed! Check logs above"
+              cd android && ./gradlew assembleRelease --stacktrace
+              exit 1
+            }
+            
+      - name: Prepare artifacts
+        script: |
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
+          ls -la build/outputs/apk/
     artifacts:
-      - build/**/outputs/apk/*.apk
+      - build/outputs/apk/*.apk
     publishing:
       email:
         recipients:
