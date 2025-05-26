@@ -7,44 +7,50 @@ workflows:
       vars:
          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-      - name: Setup Java Environment
+      - name: Setup Environment
         script: |
-         # Create necessary directories
-          mkdir -p build/logs
+          echo "=== Starting Environment Setup ==="
           
-          # Auto-detect Java installation
-          echo "=== Java Environment Setup ==="
-          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)
-          
-          if [ -z "$JAVA_HOME" ]; then
-            echo "ERROR: No compatible Java installation found"
-            echo "Available Java versions:"
-            /usr/libexec/java_home -V
+          # 1. Create directories with verification
+          echo "Creating build directories..."
+          if ! mkdir -p build/logs build/outputs/apk; then
+            echo "Failed to create directories!"
+            echo "Current working directory: $(pwd)"
+            echo "Directory permissions:"
+            ls -ld $(pwd) build || true
             exit 1
           fi
           
-          echo "✅ Using JAVA_HOME: $JAVA_HOME"
-          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
+          # 2. Verify directory creation
+          echo "Verifying directories exist..."
+          if [ ! -d "build/logs" ] || [ ! -d "build/outputs/apk" ]; then
+            echo "Directories not created!"
+            echo "Directory structure:"
+            find . -type d | grep -v '.git' || true
+            exit 1
+          fi
           
-          # Verify Java installation
-          echo "Java version info:"
+          # 3. Java setup with fallbacks
+          echo "Configuring Java environment..."
+          JAVA_HOME=$(/usr/libexec/java_home -v 11 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null || echo "")
+          if [ -z "$JAVA_HOME" ]; then
+            echo "No Java installation found"
+            echo "Available Java versions:"
+            /usr/libexec/java_home -V || true
+            exit 1
+          fi
+          
+          echo "Using JAVA_HOME: $JAVA_HOME"
+          echo "JAVA_HOME=$JAVA_HOME" >> $CM_ENV
           java -version 2>&1 | tee build/logs/java_version.log
           
-          # Create build directory (corrected from your typo 'mkdr - build/long v')
-          mkdir -p build/long
-          
-          echo "=== Directory Structure ==="
-          echo "build/logs contents:"
-          ls -la build/logs/
-          echo "build/long contents:"
-          ls -la build/long/
-      - name: Verify Environment
-        script: |
-          echo "=== Environment Check ==="
-          flutter doctor -v
-          java -version
-          echo "JAVA_HOME=$JAVA_HOME"
-          ls -la "$JAVA_HOME/bin/java"
+          # 4. Final verification
+          echo "=== Setup Complete ==="
+          echo "Directory structure:"
+          ls -lR build || true
+          echo "Environment variables:"
+          printenv | grep -E 'JAVA_HOME|GRADLE|ANDROID' || true
+
 
       # ======================
       # 2. GRADLE CONFIGURATION  
