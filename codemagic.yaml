@@ -65,36 +65,34 @@ workflows:
       # ======================
       - name: Run Build with Debug
         script: |
-          echo "=== Starting Build ==="
-          mkdir -p build/logs
+          echo "=== Starting Build ===" | tee build/logs/build.log
+          flutter clean >> build/logs/build.log 2>&1
           
-          # Clean everything
-          flutter clean
-          rm -rf android/build
-          
-          # Gradle build with full logging
+          # Run Gradle build with proper log handling
           cd android
-          ./gradlew clean assembleRelease \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            --scan \
-            --console=plain \
-            -Pverbose=true \
-            > ../build/logs/gradle.log 2>&1 || {
-              echo "=== GRADLE BUILD FAILED ==="
-              echo "Last 50 lines:"
-              tail -n 50 ../build/logs/gradle.log
-              echo "Relevant errors:"
-              grep -A 20 -B 5 -i "error\|fail\|exception\|flutter_plugin_android_lifecycle\|compileReleaseJavaWithJavac" ../build/logs/gradle.log || cat ../build/logs/gradle.log
-              exit 1
+          {
+            ./gradlew clean assembleRelease \
+              --no-daemon \
+              --stacktrace \
+              --info \
+              --scan \
+              --console=plain 2>&1 | tee ../build/logs/gradle.log
+          } || {
+            echo "=== GRADLE BUILD FAILED ===" | tee -a ../build/logs/build.log
+            echo "Last 50 lines:" | tee -a ../build/logs/build.log
+            tail -n 50 ../build/logs/gradle.log | tee -a ../build/logs/build.log
+            echo "Relevant errors:" | tee -a ../build/logs/build.log
+            grep -A 20 -B 5 -i "error\|fail\|exception" ../build/logs/gradle.log | tee -a ../build/logs/build.log || true
+            exit 1
           }
           cd ..
           
-          # Flutter build
-          flutter build apk --release --verbose > build/logs/flutter.log 2>&1 || {
-            echo "=== FLUTTER BUILD FAILED ==="
-            tail -n 50 build/logs/flutter.log
+          # Run Flutter build
+          {
+            flutter build apk --release --verbose 2>&1 | tee build/logs/flutter.log
+          } || {
+            echo "=== FLUTTER BUILD FAILED ===" | tee -a build/logs/build.log
+            tail -n 50 build/logs/flutter.log | tee -a build/logs/build.log
             exit 1
           }
 
