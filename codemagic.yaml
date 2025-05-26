@@ -4,37 +4,39 @@ workflows:
     environment:
       groups:
         - keystore
+      vars:
+        JAVA_HOME: "/usr/lib/jvm/java-11-openjdk-amd64"
     scripts:
-      # - name: Setup Kotlin and Gradle
-      #   script: |
-      #     # Set compatible Kotlin version
-      #     sed -i '' "s/kotlin_version = '1.9.20'/kotlin_version = '1.8.10'/" android/build.gradle
-          
-      #     # Verify Gradle wrapper
-      #     cd android && ./gradlew --version
-      - name: Setup environment
+      - name: Debug Setup
         script: |
-          flutter pub get
-          flutter clean
+          echo "=== Environment Debug ==="
+          flutter doctor -v
+          java -version
+          cd android && ./gradlew --version
+          cd ..
 
-      - name: Generate Gradle wrapper
+      - name: Clean and Prepare
+        script: |
+          flutter clean
+          rm -rf android/build
+          flutter pub get
+
+      - name: Build with Full Logs
         script: |
           cd android
-          flutter pub get
-          flutter clean
-          gradle wrapper --gradle-version 7.5
-      - name: Downgrade Kotlin
-        script: |
-          sed -i.bak 's/kotlin_version = .*/kotlin_version = "1.8.10"/' android/build.gradle
-          sed -i.bak 's/gradle:7.[0-9].*/gradle:7.6.0"/' android/build.gradle
-
-      - name: Build APK
-        script: |
+          ./gradlew clean --stacktrace --info
+          ./gradlew assembleRelease --stacktrace --info --scan
+          cd ..
           flutter build apk --release --verbose
 
-      - name: Prepare artifacts
+      - name: Artifact Collection
         script: |
           mkdir -p build/outputs/apk
           cp build/app/outputs/flutter-apk/*.apk build/outputs/apk/
+          ls -la build/outputs/apk/
     artifacts:
       - build/outputs/apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
