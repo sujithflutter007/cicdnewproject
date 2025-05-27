@@ -42,7 +42,7 @@ workflows:
             exit 1
           fi
       - name: Fix Gradle Wrapper
-        run: |
+        script: |
           cd android
           gradle wrapper --gradle-version 8.0
           cd ..
