@@ -123,12 +123,12 @@ workflows:
           # Run Gradle build with proper log handling
           cd android
           {
-            ./gradlew clean assembleRelease \
-              --no-scan \
-              --no-daemon \
-              -Dorg.gradle.enterprise.buildScan.publish.never=true \
-              -Dorg.gradle.analytics.askBeforeUpload=false \
-              -Dorg.gradle.configureondemand=true 
+           ./gradlew clean assembleRelease \
+            --no-scan \
+            --no-daemon \
+            --console=plain \
+            -Dorg.gradle.enterprise.buildScan.publish.never=true \
+            -Dorg.gradle.analytics.askBeforeUpload=false
           } || {
             echo "=== GRADLE BUILD FAILED ===" | tee -a ../build/logs/build.log
             echo "Last 50 lines:" | tee -a ../build/logs/build.log
