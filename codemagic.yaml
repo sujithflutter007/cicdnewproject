@@ -20,7 +20,12 @@ workflows:
           echo -e "org.gradle.unsafe.configuration-cache=false\norg.gradle.enterprise.buildScan.publish.never=true" > gradle.properties
           ./gradlew --version || (echo "Gradle validation failed"; exit 1)
           cd ..
-      - name: Set up local.properties
+      - name: Enable AndroidX
+        script: |
+          echo "=== Enabling AndroidX ==="
+          echo -e "\n# AndroidX Configuration\nandroid.useAndroidX=true\nandroid.enableJetifier=true" >> android/gradle.properties
+          cat android/gradle.properties | grep "android.useAndroidX"
+          - name: Set up local.properties
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties    
