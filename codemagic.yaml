@@ -58,18 +58,39 @@ workflows:
       # ======================
       - name: Configure Gradle
         script: |
-          echo "=== Gradle Setup ==="
+          echo "=== Comprehensive Gradle Setup ==="
           cd android
-          # Force Gradle 8.0
+          
+          # 1. Ensure wrapper files exist
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Regenerating missing Gradle wrapper..."
+            flutter create --platforms android .
+          fi
+
+          # 2. Force Gradle 8.0
           sed -i.bak 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip|' gradle/wrapper/gradle-wrapper.properties
           
-          # Update Android Gradle Plugin
+          # 3. Update Android Gradle Plugin
           sed -i.bak 's|com.android.tools.build:gradle:[0-9.]*|com.android.tools.build:gradle:8.0.0|' build.gradle
           
-          # Set Java 11 compatibility
+          # 4. Set Java compatibility
           echo "android { compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 } }" >> app/build.gradle
           
-          ./gradlew --version
+          # 5. Disable all Gradle analytics and scans
+          echo -e "\n# Disable all telemetry\norg.gradle.enterprise.buildScan.publish.never=true\norg.gradle.analytics.askBeforeUpload=false" > gradle.properties
+          echo "org.gradle.unsafe.configuration-cache=true" >> gradle.properties
+          
+          # 6. Verify setup
+          echo "=== Final Configuration ==="
+          echo "Gradle version:"
+          cat gradle/wrapper/gradle-wrapper.properties | grep "distributionUrl"
+          echo "Android Gradle Plugin:"
+          grep "com.android.tools.build:gradle" build.gradle
+          echo "Gradle properties:"
+          cat gradle.properties | grep -i "scan\|analytics"
+          
+          # 7. Test wrapper
+          ./gradlew --version || (echo "Gradle wrapper test failed!"; exit 1)
           cd ..
 
       # ======================
