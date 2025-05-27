@@ -52,30 +52,15 @@ workflows:
           java -version
           echo "JAVA_HOME=$JAVA_HOME"
           ls -la "$JAVA_HOME/bin/java"
-      - name: Fix Gradle Wrapper
+      - name: Ensure Gradle Wrapper
         script: |
-          echo "=== Ensuring Gradle Wrapper Integrity ==="
-          
-          # Create android directory if missing
-          if [ ! -d "android" ]; then
-            flutter create --platforms android .
+          echo "=== Validating Gradle Wrapper ==="
+          if ! unzip -q -l android/gradle/wrapper/gradle-wrapper.jar | grep GradleWrapperMain; then
+            echo "Corrupt gradle-wrapper.jar - replacing..."
+            curl -L https://github.com/gradle/gradle/raw/v8.0.0/gradle/wrapper/gradle-wrapper.jar -o android/gradle/wrapper/gradle-wrapper.jar
+            chmod +x android/gradlew
           fi
-          
-          # Force-regenerate wrapper files
-          cd android
-          rm -f gradle/wrapper/gradle-wrapper.jar
-          ./gradlew wrapper --gradle-version 8.0 --distribution-type all
-          
-          # Verify critical files exist
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "❌ gradle-wrapper.jar still missing!"
-            exit 1
-          fi
-          
-          # Set executable permissions
-          chmod +x gradlew
-          ls -la gradlew gradle/wrapper/gradle-wrapper.jar
-          cd ..
+          ./android/gradlew --version || exit 1
       # ======================
       # 2. GRADLE CONFIGURATION  
       # ======================
