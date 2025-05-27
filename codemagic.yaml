@@ -41,7 +41,11 @@ workflows:
             echo "ERROR: Gradle didn't produce APK!"
             exit 1
           fi
-
+      - name: Fix Gradle Wrapper
+        run: |
+          cd android
+          gradle wrapper --gradle-version 8.0
+          cd ..
       - name: Setup Java Environment
         script: |
           
