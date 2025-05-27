@@ -7,6 +7,19 @@ workflows:
       vars:
          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
+    # ======================
+      # 1. NUCLEAR GRADLE RESET  <-- ADD THIS BLOCK FIRST
+      # ======================
+      - name: Nuclear Gradle Reset
+        script: |
+          echo "=== COMPLETE GRADLE RESET ==="
+          rm -rf android/.gradle android/gradle android/gradlew* android/local.properties
+          flutter create --platforms android .
+          cd android
+          echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip" > gradle/wrapper/gradle-wrapper.properties
+          echo -e "org.gradle.unsafe.configuration-cache=false\norg.gradle.enterprise.buildScan.publish.never=true" > gradle.properties
+          ./gradlew --version || (echo "Gradle validation failed"; exit 1)
+          cd ..
       - name: Set up local.properties
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
@@ -94,6 +107,8 @@ workflows:
           echo "Problematic dependencies:"
           grep -i "conflict\|incompatible" build/logs/dependencies.txt || echo "No conflicts found"
 
+
+    
       # ======================
       # 4. BUILD PROCESS
       # ======================
@@ -106,22 +121,16 @@ workflows:
             cat android/gradle.properties | grep -i scan  # Verify
                           
           # Run Gradle build with proper log handling
+    
+           . echo "=== Starting Build ==="
           cd android
-          {
-           ./gradlew clean assembleRelease \
+          ./gradlew clean assembleRelease \
+            --no-configuration-cache \
             --no-scan \
             --no-daemon \
+            --stacktrace \
             --console=plain \
-            -Dorg.gradle.enterprise.buildScan.publish.never=true \
-            -Dorg.gradle.analytics.askBeforeUpload=false
-          } || {
-            echo "=== GRADLE BUILD FAILED ===" | tee -a ../build/logs/build.log
-            echo "Last 50 lines:" | tee -a ../build/logs/build.log
-            tail -n 50 ../build/logs/gradle.log | tee -a ../build/logs/build.log
-            echo "Relevant errors:" | tee -a ../build/logs/build.log
-            grep -A 20 -B 5 -i "error\|fail\|exception" ../build/logs/gradle.log | tee -a ../build/logs/build.log || true
-            exit 1
-          }
+            2>&1 | tee ../build/logs/gradle.log
           cd ..
           
           # Run Flutter build
