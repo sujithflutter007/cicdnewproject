@@ -55,13 +55,34 @@ workflows:
       # ======================
       # 4. GRADLE CONFIGURATION
       # ======================
-      - name: Configure Gradle
+      - name: Ensure Gradle Wrapper
         script: |
+          echo "=== Setting Up Gradle Wrapper ==="
+          
+          # Create android directory if missing
+          if [ ! -d "android" ]; then
+            flutter create --platforms android .
+          fi
+          
+          # Verify or regenerate wrapper files
           cd android
-          sed -i.bak 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip|' gradle/wrapper/gradle-wrapper.properties
-          sed -i.bak 's|com.android.tools.build:gradle:[0-9.]*|com.android.tools.build:gradle:8.0.0|' build.gradle
-          echo "android { compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 } }" >> app/build.gradle
+          if [ ! -f "gradlew" ]; then
+            echo "Gradle wrapper missing - regenerating..."
+            flutter create --platforms android .
+            chmod +x gradlew
+          fi
+          
+          # Ensure wrapper directory exists
+          mkdir -p gradle/wrapper
+          
+          # Set Gradle version
+          echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-all.zip" > gradle/wrapper/gradle-wrapper.properties
+          
+          # Verify
+          ls -la gradlew gradle/wrapper/
+          ./gradlew --version || exit 1
           cd ..
+
 
       # ======================
       # 5. BUILD PROCESS
