@@ -34,7 +34,7 @@ migrate_working_dir/
 # Keep critical build files
 !android/gradlew
 !android/gradlew.bat
-!android/wrapper/gradle-wrapper.jar
+!android/gradle/wrapper/gradle-wrapper.jar
 !android/gradle/wrapper/gradle-wrapper.properties
 !android/build.gradle
 !android/app/build.gradle
