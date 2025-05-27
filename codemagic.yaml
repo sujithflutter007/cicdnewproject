@@ -7,40 +7,40 @@ workflows:
       vars:
          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
-    - name: Run Build with Debug
-      script: |
-        echo "=== Starting Build ==="
-        # Ensure proper permissions
-        chmod +x android/gradlew
-        
-        # Create logs directory relative to project root
-        mkdir -p build/logs
-        
-        flutter clean
-        
-        # Run Gradle build from project root
-        {
-          cd android && \
-          ./gradlew clean assembleRelease \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            --scan \
-            --console=plain 2>&1 | tee ../build/logs/gradle.log
-        } || {
-          echo "=== GRADLE BUILD FAILED ==="
-          echo "Last 50 lines:"
-          tail -n 50 build/logs/gradle.log || true
-          echo "Relevant errors:"
-          grep -A 20 -B 5 -i "error\|fail\|exception" build/logs/gradle.log || true
-          exit 1
-        }
-        
-        # Verify Gradle outputs
-        if [ ! -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-          echo "ERROR: Gradle didn't produce APK!"
-          exit 1
-        fi
+      - name: Run Build with Debug
+        script: |
+          echo "=== Starting Build ==="
+          # Ensure proper permissions
+          chmod +x android/gradlew
+          
+          # Create logs directory relative to project root
+          mkdir -p build/logs
+          
+          flutter clean
+          
+          # Run Gradle build from project root
+          {
+            cd android && \
+            ./gradlew clean assembleRelease \
+              --no-daemon \
+              --stacktrace \
+              --info \
+              --scan \
+              --console=plain 2>&1 | tee ../build/logs/gradle.log
+          } || {
+            echo "=== GRADLE BUILD FAILED ==="
+            echo "Last 50 lines:"
+            tail -n 50 build/logs/gradle.log || true
+            echo "Relevant errors:"
+            grep -A 20 -B 5 -i "error\|fail\|exception" build/logs/gradle.log || true
+            exit 1
+          }
+          
+          # Verify Gradle outputs
+          if [ ! -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            echo "ERROR: Gradle didn't produce APK!"
+            exit 1
+          fi
 
       - name: Setup Java Environment
         script: |
