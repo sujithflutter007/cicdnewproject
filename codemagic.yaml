@@ -100,11 +100,11 @@ workflows:
           cd android
           {
             ./gradlew clean assembleRelease \
+              --no-scan \
               --no-daemon \
-              --stacktrace \
-              --info \
-              --scan \
-              --console=plain 2>&1 | tee ../build/logs/gradle.log
+              -Dorg.gradle.enterprise.buildScan.publish.never=true \
+              -Dorg.gradle.analytics.askBeforeUpload=false \
+              -Dorg.gradle.configureondemand=true 
           } || {
             echo "=== GRADLE BUILD FAILED ===" | tee -a ../build/logs/build.log
             echo "Last 50 lines:" | tee -a ../build/logs/build.log
