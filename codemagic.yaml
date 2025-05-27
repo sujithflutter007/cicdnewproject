@@ -7,6 +7,10 @@ workflows:
       vars:
          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4096m"
     scripts:
+      - name: Set up local.properties
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties    
       - name: Fix Gradle Wrapper
         script: |
           cd android
