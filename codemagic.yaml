@@ -70,14 +70,10 @@ workflows:
         script: |
           echo "=== Starting Build ==="
           flutter clean
-          
           cd android
           ./gradlew clean assembleRelease \
             --no-configuration-cache \
             --no-scan \
-            --no-daemon \
-            --stacktrace \
-            --console=plain
           cd ..
 
           flutter build apk --release
