@@ -91,12 +91,11 @@ workflows:
       - name: Run Build with Debug
         script: |
           echo "=== Starting Build ===" | tee build/logs/build.log
-
-           echo "Configuring Gradle properties..."
-           echo "org.gradle.enterprise.buildScan.publish.never=true" >> android/gradle.properties
-           echo "org.gradle.unsafe.configuration-cache=true" >> android/gradle.properties
-                  flutter clean >> build/logs/build.log 2>&1
-                  
+          echo "Disabling Gradle scans permanently..."
+            echo -e "\n# Disable build scans\norg.gradle.enterprise.buildScan.publish.never=true" >> android/gradle.properties
+            echo "org.gradle.unsafe.configuration-cache=true" >> android/gradle.properties
+            cat android/gradle.properties | grep -i scan  # Verify
+                          
           # Run Gradle build with proper log handling
           cd android
           {
